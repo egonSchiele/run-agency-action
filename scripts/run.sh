@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Inputs: AGENCY_FILE, AGENCY_EXTRA_DEPS — read from env, never interpolated.
+# Inputs: AGENCY_FILE, AGENCY_EXTRA_DEPS.
+# Both are passed via env vars so GitHub Actions YAML expansion never
+# interpolates user-controlled strings into the shell command. Inside this
+# script, `$AGENCY_FILE` is always quoted; `$AGENCY_EXTRA_DEPS` is parsed
+# into an array and each entry is regex-validated before being passed as
+# argv to `npm i`.
 
 cd "$GITHUB_ACTION_PATH/bundled"
 npm ci --ignore-scripts
@@ -13,10 +18,23 @@ export PATH="$GITHUB_ACTION_PATH/bundled/node_modules/.bin:$PATH"
 
 if [ -n "${AGENCY_EXTRA_DEPS:-}" ]; then
   # Install extras into the bundled tree so they share the same node_modules
-  # as the stdlib. --no-save keeps the committed lockfile untouched.
-  # Intentionally word-split: AGENCY_EXTRA_DEPS is a space-separated package list.
-  # shellcheck disable=SC2086
-  npm i --no-save --ignore-scripts --prefix "$GITHUB_ACTION_PATH/bundled" $AGENCY_EXTRA_DEPS
+  # as the stdlib. --no-save + --no-package-lock keep the committed
+  # package.json AND lockfile untouched on disk.
+  #
+  # Parse the space-separated input into an array and validate each entry
+  # against npm's package-name rules (optionally with a @version suffix) so
+  # shell metacharacters can never reach `npm i`'s argv.
+  read -r -a deps <<<"$AGENCY_EXTRA_DEPS"
+  name_re='^(@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*(@[A-Za-z0-9._^~>=<*+|-]+)?$'
+  for dep in "${deps[@]}"; do
+    if ! [[ "$dep" =~ $name_re ]]; then
+      echo "Refusing to install dep with disallowed characters: '$dep'" >&2
+      exit 1
+    fi
+  done
+  npm i --no-save --no-package-lock --ignore-scripts \
+    --prefix "$GITHUB_ACTION_PATH/bundled" \
+    "${deps[@]}"
 fi
 
 # Install the user's own deps if they have any. Prefer `npm ci` when a lockfile
