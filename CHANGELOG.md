@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.0.2
+Update with a few bug fixes to make the release workflow work.
+
+## v1.0.1
+Update with a few bug fixes to make the release workflow work.
+
 ## v1.0.0
 
 Initial release of `egonSchiele/run-agency-action`.
