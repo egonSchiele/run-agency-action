@@ -18,13 +18,18 @@ jobs:
       - name: Build release tarball
         run: |
           tag="${GITHUB_REF_NAME}"
+          # Write the tarball OUTSIDE the working tree. If we wrote it into
+          # `.` then tar would notice the directory changing as the tarball
+          # itself appeared and exit with "file changed as we read it".
+          out="${RUNNER_TEMP}/run-agency-action-${tag}.tar.gz"
           tar --exclude='.git' --exclude='node_modules' \
-              -czf "run-agency-action-${tag}.tar.gz" .
+              -czf "$out" .
+          echo "TARBALL=$out" >> "$GITHUB_ENV"
 
       - name: Generate Sigstore attestation
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be  # v2 (96b4a1e)
         with:
-          subject-path: run-agency-action-*.tar.gz
+          subject-path: ${{ env.TARBALL }}
 
       - name: Extract release notes for this tag from CHANGELOG.md
         run: |
@@ -48,4 +53,4 @@ jobs:
           gh release create "$tag" \
             --title "$tag" \
             --notes-file release-notes.md \
-            run-agency-action-*.tar.gz
+            "$TARBALL"
