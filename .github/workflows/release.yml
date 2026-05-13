@@ -3,6 +3,10 @@ on:
   push:
     tags:
       - 'v*'
+  # Manual trigger so you can re-run a release from the Actions tab without
+  # deleting + re-pushing the tag. Pick the existing tag from the "Use
+  # workflow from" dropdown when dispatching.
+  workflow_dispatch:
 permissions:
   contents: write
   id-token: write
