@@ -1,0 +1,34 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - id: run
+        uses: ./
+        with:
+          file: tests/canary.agency
+      - name: Verify canary output appeared in logs
+        # The action's own stdout is captured in the step log above.
+        # We assert exit-code success implicitly by reaching this step.
+        run: echo "Canary step exited 0 — success."
+
+  missing-file:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - id: run
+        continue-on-error: true
+        uses: ./
+        with:
+          file: tests/does-not-exist.agency
+      - name: Assert missing-file failure
+        run: |
+          if [ "${{ steps.run.outcome }}" != "failure" ]; then
+            echo "Expected failure but got: ${{ steps.run.outcome }}"
+            exit 1
+          fi

@@ -1,0 +1,27 @@
+name: Run Agency agent
+description: Compile and execute an Agency (.agency) file
+inputs:
+  file:
+    description: Path to the .agency file to run
+    required: true
+  node-version:
+    description: Node version
+    required: false
+    default: '20'
+  extra-deps:
+    description: Space-separated npm packages to install (added to bundled stdlib)
+    required: false
+    default: ''
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.0.4
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: npm
+        cache-dependency-path: ${{ github.action_path }}/bundled/package-lock.json
+    - shell: bash
+      env:
+        AGENCY_FILE: ${{ inputs.file }}
+        AGENCY_EXTRA_DEPS: ${{ inputs.extra-deps }}
+      run: ${{ github.action_path }}/scripts/run.sh

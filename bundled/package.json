@@ -1,0 +1,9 @@
+{
+  "name": "agency-run-action-bundle",
+  "version": "0.0.0",
+  "private": true,
+  "dependencies": {
+    "agency-lang": "0.1.1",
+    "@agency-lang/github": "0.1.0"
+  }
+}
