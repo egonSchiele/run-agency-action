@@ -41,7 +41,21 @@ Or pin to an exact commit SHA (recommended for security):
 | Top-level failure               | 1    | prints the failure value                           |
 | Top-level interrupt unanswered  | 1    | message contains `Interrupts cannot be answered`   |
 
+## Examples
+
+- [`examples/review-agent/`](./examples/review-agent/) — a scheduled agent that
+  reviews markdown files in the consuming repo and opens a PR with fixes.
+
 ## Provenance
 
 Releases are signed with [Sigstore](https://www.sigstore.dev/) via
-`actions/attest-build-provenance`. Verify with `gh attestation verify`.
+`actions/attest-build-provenance`. Verify with `gh attestation verify`. See
+[DEVELOPMENT.md](./DEVELOPMENT.md#attestation-what-it-is-how-it-works-how-consumers-use-it)
+for a full walkthrough, including how to gate the action behind a
+verification job.
+
+## For maintainers
+
+See [DEVELOPMENT.md](./DEVELOPMENT.md) for the release process, how
+attestation works, how to bump the bundled `agency-lang` version, and a
+reference for every environment variable the action reads or sets.
