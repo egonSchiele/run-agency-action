@@ -48,34 +48,48 @@ if [ -f package.json ]; then
   fi
 fi
 
-# Make the bundled stdlib resolvable from the compiled .js file. Node's ESM
-# loader walks up from the source file looking for node_modules and ignores
-# NODE_PATH for bare-specifier resolution, so we expose the bundle via a
-# symlink in a scratch directory we own. We symlink any package the user
-# already has into the scratch dir first, so user pins still win for shared
-# packages, but the bundled stdlib is always resolvable.
-SCRATCH="$(mktemp -d)"
-trap 'rm -rf "$SCRATCH"' EXIT
+# Make the bundled stdlib resolvable from the compiled .js file.
+#
+# `agency run foo.agency` compiles to `foo.js` next to the source and runs
+# it. Node's ESM loader walks up from THAT file (not from cwd) looking for
+# `node_modules`, and it ignores `NODE_PATH` for bare-specifier resolution.
+# So we have to put the bundle's packages somewhere Node will actually
+# find them — i.e. inside `$GITHUB_WORKSPACE/node_modules`.
+#
+# We do this with surgical symlinks + a trap that removes only what we
+# created, so the workspace looks unchanged to subsequent workflow steps.
+WS_NM="$GITHUB_WORKSPACE/node_modules"
+CREATED_DIR=0
+CREATED_ENTRIES=()
 
-mkdir "$SCRATCH/node_modules"
-# 1. Bundled stdlib (and transitive deps) — link every entry individually so
-#    we can override them with user packages below.
+cleanup() {
+  # `${arr[@]+"${arr[@]}"}` expands to nothing when the array is unset/empty,
+  # which is required under `set -u`.
+  for n in ${CREATED_ENTRIES[@]+"${CREATED_ENTRIES[@]}"}; do
+    rm -f "$WS_NM/$n"
+  done
+  if [ "$CREATED_DIR" = "1" ]; then
+    rmdir "$WS_NM" 2>/dev/null || true
+  fi
+}
+trap cleanup EXIT
+
+if [ ! -d "$WS_NM" ]; then
+  mkdir "$WS_NM"
+  CREATED_DIR=1
+fi
+
 for entry in "$GITHUB_ACTION_PATH/bundled/node_modules"/*; do
   name="$(basename "$entry")"
-  ln -s "$entry" "$SCRATCH/node_modules/$name"
+  # Skip npm's internal dotfiles like .package-lock.json and .bin.
+  case "$name" in .*) continue;; esac
+  # Don't clobber a package the user already has — their pins win.
+  if [ ! -e "$WS_NM/$name" ]; then
+    ln -s "$entry" "$WS_NM/$name"
+    CREATED_ENTRIES+=("$name")
+  fi
 done
-# 2. User packages override the bundled ones (their pins win).
-if [ -d node_modules ]; then
-  for entry in node_modules/*; do
-    name="$(basename "$entry")"
-    rm -f "$SCRATCH/node_modules/$name"
-    ln -s "$PWD/$entry" "$SCRATCH/node_modules/$name"
-  done
-fi
 
 export AGENCY_RUN_ACTION_VERSION="${AGENCY_RUN_ACTION_VERSION:-${GITHUB_ACTION_REF:-local}}"
 
-# Resolve to absolute path so cwd change doesn't break it.
-AGENCY_FILE_ABS="$(cd "$(dirname "$AGENCY_FILE")" && pwd)/$(basename "$AGENCY_FILE")"
-cd "$SCRATCH"
-agency run "$AGENCY_FILE_ABS"
+agency run "$AGENCY_FILE"
