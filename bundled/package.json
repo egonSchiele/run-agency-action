@@ -1,0 +1,12 @@
+{
+  "name": "agency-run-action-bundle",
+  "version": "0.0.0",
+  "private": true,
+  "dependencies": {
+    "agency-lang": "0.1.1",
+    "@agency-lang/github": "0.1.0"
+  },
+  "overrides": {
+    "termcolors": "https://codeload.github.com/egonSchiele/termcolors/tar.gz/d5c1f497618398ce1440d2383d2aad2642e4051f"
+  }
+}

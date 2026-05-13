@@ -1,0 +1,34 @@
+# Drop this file into a consuming repo as `.github/workflows/doc-review.yml`.
+#
+# What it does:
+#   - Runs every Monday at 09:00 UTC (and on manual dispatch).
+#   - Checks out the repo, runs `examples/review-agent/review.agency` from
+#     this action, and lets the agent open a PR with any fixes it found.
+#
+# Required setup in the consuming repo:
+#   1. Settings → Actions → General → Workflow permissions → "Read and write".
+#   2. Settings → Actions → General → "Allow GitHub Actions to create and
+#      approve pull requests".
+#   3. Add an LLM provider key (e.g. ANTHROPIC_API_KEY) as a repo secret.
+name: Doc review
+on:
+  schedule:
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - uses: egonSchiele/run-agency-action@v1.0.0
+        with:
+          file: examples/review-agent/review.agency
+          # fast-glob is used inside the agent; pull it in as an extra dep.
+          extra-deps: fast-glob
+        env:
+          # GITHUB_TOKEN is auto-injected; the @agency-lang/github stdlib
+          # picks it up automatically.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

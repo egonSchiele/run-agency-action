@@ -1,0 +1,41 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - id: run
+        uses: ./
+        with:
+          file: tests/canary.agency
+        # Capture stdout/stderr so the next step can grep it.
+      - name: Re-run canary and capture output
+        run: |
+          # Run via the local action's script directly so we can capture output.
+          # (Composite action steps don't expose their stdout as outputs.)
+          set -o pipefail
+          AGENCY_FILE=tests/canary.agency \
+          AGENCY_EXTRA_DEPS='' \
+          GITHUB_ACTION_PATH="$PWD" \
+          bash scripts/run.sh 2>&1 | tee canary.log
+          grep -q "canary: ok" canary.log
+
+  missing-file:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - id: run
+        continue-on-error: true
+        uses: ./
+        with:
+          file: tests/does-not-exist.agency
+      - name: Assert missing-file failure
+        run: |
+          if [ "${{ steps.run.outcome }}" != "failure" ]; then
+            echo "Expected failure but got: ${{ steps.run.outcome }}"
+            exit 1
+          fi

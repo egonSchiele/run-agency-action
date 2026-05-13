@@ -1,0 +1,97 @@
+/**
+Periodic-review agent.
+
+Walks the repo, asks the LLM whether any markdown files have obvious typos or
+broken links, and — if it finds any — opens a pull request with the fixes.
+
+Designed to be run by `egonSchiele/run-agency-action` on a schedule. The
+`@agency-lang/github` package is provided by the action; you do not need to
+list it in a local package.json.
+*/
+
+import { commitFiles, openPullRequest, branchExists } from "pkg::@agency-lang/github"
+
+type Suggestion = {
+  path: string
+  before: string
+  after: string
+  reason: string
+}
+
+type Review = {
+  suggestions: Suggestion[]
+}
+
+node main() {
+  const branch = "agent/review-" + isoDate()
+
+  if (branchExists(name: branch)) {
+    print("Branch " + branch + " already exists; nothing to do.")
+    return
+  }
+
+  const review: Review = llm(
+    "You are a careful documentation reviewer. Read every .md file in this
+     repository (use the listFiles and readFile tools). Return at most 5
+     concrete, mechanical fixes (typos, dead links, stale commands). Do NOT
+     suggest stylistic rewrites. Each suggestion must give the exact 'before'
+     and 'after' substrings so they can be applied with a literal replace.",
+    { tools: [listFiles, readFile] }
+  )
+
+  if (review.suggestions.length == 0) {
+    print("No suggestions; exiting clean.")
+    return
+  }
+
+  for (const s of review.suggestions) {
+    applyReplacement(path: s.path, before: s.before, after: s.after)
+  }
+
+  commitFiles(
+    message: "docs: automated review fixes",
+    branch: branch
+  )
+  const pr = openPullRequest(
+    title: "Automated documentation review",
+    body: renderBody(review),
+    head: branch,
+    labels: ["automated", "docs"]
+  )
+  print("Opened PR " + pr.url)
+}
+
+def isoDate(): string {
+  // YYYY-MM-DD from the current UTC date.
+  return ts::new Date().toISOString().slice(0, 10)
+}
+
+def renderBody(review: Review): string {
+  let body = "Suggestions found by the review agent:\n\n"
+  for (const s of review.suggestions) {
+    body = body + "- **" + s.path + "**: " + s.reason + "\n"
+  }
+  return body
+}
+
+// --- tools the LLM can call ---
+
+safe def listFiles(): string[] {
+  return ts::require("fast-glob").sync("**/*.md", {
+    ignore: ["node_modules/**", ".git/**"]
+  })
+}
+
+safe def readFile(path: string): string {
+  return ts::require("fs").readFileSync(path, "utf8")
+}
+
+def applyReplacement(path: string, before: string, after: string) {
+  const fs = ts::require("fs")
+  const contents = fs.readFileSync(path, "utf8")
+  if (!contents.includes(before)) {
+    print("skip " + path + ": 'before' substring not found")
+    return
+  }
+  fs.writeFileSync(path, contents.replace(before, after))
+}

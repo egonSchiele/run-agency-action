@@ -1,0 +1,51 @@
+name: Release
+on:
+  push:
+    tags:
+      - 'v*'
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Build release tarball
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          tar --exclude='.git' --exclude='node_modules' \
+              -czf "run-agency-action-${tag}.tar.gz" .
+
+      - name: Generate Sigstore attestation
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be  # v2 (96b4a1e)
+        with:
+          subject-path: run-agency-action-*.tar.gz
+
+      - name: Extract release notes for this tag from CHANGELOG.md
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          # Pull just the section under "## <tag>" up to the next "## " heading.
+          awk -v tag="$tag" '
+            $0 == "## " tag { in_section = 1; next }
+            in_section && /^## / { exit }
+            in_section { print }
+          ' CHANGELOG.md > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "No CHANGELOG.md section found for $tag" >&2
+            exit 1
+          fi
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          gh release create "$tag" \
+            --title "$tag" \
+            --notes-file release-notes.md \
+            run-agency-action-*.tar.gz
