@@ -24,6 +24,25 @@ jobs:
           bash scripts/run.sh 2>&1 | tee canary.log
           grep -q "canary: ok" canary.log
 
+  # Regression guard for the out-of-workspace lockfile bug (every scheduled
+  # consumer job failed in ~14s for weeks). The `canary` job above CANNOT
+  # catch it: `uses: ./` makes $GITHUB_ACTION_PATH the workspace itself, so
+  # anything the action references under its own directory is trivially
+  # inside $GITHUB_WORKSPACE. Referring to the action by `owner/repo@sha`
+  # instead makes the runner fetch it into `…/_actions/…`, which is where
+  # real consumers run it from — a sibling of the workspace, not a child.
+  #
+  # Skipped on forks: the runner resolves the action from THIS repo, and a
+  # fork's commit SHA does not exist here.
+  external-consumer:
+    if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - uses: egonSchiele/run-agency-action@${{ github.sha }}
+        with:
+          file: tests/canary.agency
+
   missing-file:
     runs-on: ubuntu-latest
     steps:

@@ -10,14 +10,15 @@ action.yml                  # The composite action definition.
 scripts/run.sh              # Entrypoint: installs deps, runs `agency run`.
 bundled/
   package.json              # Pinned versions of agency-lang + @agency-lang/github.
-  package-lock.json         # Lockfile — caches keyed on this.
+  package-lock.json         # Lockfile — npm cache key is a sha256 of this.
   .gitignore                # Ignores node_modules/.
 tests/
   canary.agency             # Smallest possible .agency file, used by CI.
 examples/
   review-agent/             # Reference agent: scheduled doc-review + PR.
 .github/workflows/
-  ci.yml                    # Runs canary on every push / PR.
+  ci.yml                    # Canary (`uses: ./`) + external-consumer
+                            # (`uses: owner/repo@sha`) + missing-file.
   release.yml               # Fires on `v*` tag push: tarball + attestation + release.
 CHANGELOG.md                # One section per published version (## v1.0.0, …).
 ```
@@ -231,10 +232,27 @@ git push
 If CI passes, follow the [release process](#release-process) above to cut a
 new tag.
 
-The cache key in [action.yml](./action.yml) is
+The npm cache key in [action.yml](./action.yml) is a `sha256sum` of
 `bundled/package-lock.json`, so changing the lockfile automatically
-invalidates `actions/setup-node`'s npm cache for downstream consumers — no
-manual cache busting needed.
+invalidates the cache for downstream consumers — no manual cache busting
+needed.
+
+That hash is computed in bash on purpose. It is tempting to hand the lockfile
+path to `actions/setup-node`'s `cache-dependency-path` (we used to), but that
+input resolves through `@actions/glob`, which **silently discards any path
+outside `$GITHUB_WORKSPACE`** and then makes `setup-node` throw
+`Some specified paths were not resolved, unable to cache dependencies`. This
+lockfile lives under the action's own directory, which the runner unpacks to
+`…/_actions/egonSchiele/run-agency-action/<ref>/` — a *sibling* of the
+workspace, not a child. So it broke for every real consumer while this repo's
+CI stayed green, because `uses: ./` makes the action path and the workspace
+the same directory. The `external-consumer` job in
+[ci.yml](./.github/workflows/ci.yml) exists to catch exactly this: it
+references the action as `egonSchiele/run-agency-action@<sha>` so the runner
+fetches it into `_actions/` the way a consumer would.
+
+**Anything the action reads from its own directory is outside the workspace.**
+Never route such a path through `hashFiles()` or an action input that globs.
 
 ### Updating the third-party actions (`actions/checkout`, `actions/setup-node`, etc.)
 

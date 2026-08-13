@@ -17,19 +17,52 @@ runs:
   steps:
     # Normalize $GITHUB_ACTION_PATH up front. When the action is invoked via
     # `uses: ./` (e.g. from this repo's own CI), `github.action_path` ends in
-    # `/.`, which produces `…/.//bundled/…` — `actions/setup-node` v4+ rejects
-    # any pattern containing `.` or `..` segments. `realpath` collapses them.
+    # `/.`, which produces `…/.//bundled/…`. `realpath` collapses that.
+    #
+    # We also hash the bundled lockfile HERE, in bash, rather than letting
+    # `actions/setup-node` do it via `cache-dependency-path`. That input (and
+    # the workflow-level `hashFiles()`) resolves through `@actions/glob`, whose
+    # `hashFiles` defaults `allowFilesOutsideWorkspace` to false and discards
+    # any match outside $GITHUB_WORKSPACE. This lockfile lives in the action's
+    # own directory — `…/_actions/egonSchiele/run-agency-action/<ref>/bundled/`
+    # — which is a SIBLING of the workspace for every real consumer. So the
+    # glob matched nothing, setup-node threw "Some specified paths were not
+    # resolved, unable to cache dependencies", and the whole action died before
+    # `run.sh` ever started.
+    #
+    # This repo's own CI could never catch that: it invokes the action as
+    # `uses: ./`, which makes the action path the workspace itself, so the
+    # lockfile *was* inside the workspace and the cache worked. See the
+    # `external-consumer` job in .github/workflows/ci.yml, which now exercises
+    # the real `_actions/` layout.
     - id: paths
       shell: bash
       run: |
         action_path="$(realpath "$GITHUB_ACTION_PATH")"
         echo "action_path=$action_path" >> "$GITHUB_OUTPUT"
-        echo "lockfile=$action_path/bundled/package-lock.json" >> "$GITHUB_OUTPUT"
+        lockfile="$action_path/bundled/package-lock.json"
+        # `sha256sum` is GNU coreutils (Linux runners); macOS runners ship
+        # `shasum` instead. Both print "<hash>  <path>", so `cut` handles either.
+        if command -v sha256sum >/dev/null 2>&1; then
+          lockhash="$(sha256sum "$lockfile" | cut -d' ' -f1)"
+        else
+          lockhash="$(shasum -a 256 "$lockfile" | cut -d' ' -f1)"
+        fi
+        echo "lockhash=$lockhash" >> "$GITHUB_OUTPUT"
     - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
       with:
         node-version: ${{ inputs.node-version }}
-        cache: npm
-        cache-dependency-path: ${{ steps.paths.outputs.lockfile }}
+    # npm's cache directory is only knowable once node/npm are on PATH, so this
+    # runs after setup-node rather than being hardcoded to `~/.npm`.
+    - id: npm-cache
+      shell: bash
+      run: echo "dir=$(npm config get cache)" >> "$GITHUB_OUTPUT"
+    - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+      with:
+        path: ${{ steps.npm-cache.outputs.dir }}
+        key: agency-run-action-npm-${{ runner.os }}-${{ runner.arch }}-node${{ inputs.node-version }}-${{ steps.paths.outputs.lockhash }}
+        restore-keys: |
+          agency-run-action-npm-${{ runner.os }}-${{ runner.arch }}-node${{ inputs.node-version }}-
     - shell: bash
       env:
         AGENCY_FILE: ${{ inputs.file }}
