@@ -13,16 +13,17 @@ file at all, with:
 `actions/setup-node`'s `cache-dependency-path` was pointed at the bundled
 lockfile inside the action's own directory. That input resolves through
 `@actions/glob`, which discards anything outside `$GITHUB_WORKSPACE` — and the
-runner unpacks the action to `…/_actions/…`, a sibling of the workspace. The
-npm cache is now keyed on a `sha256` of the lockfile computed in bash and
-applied with `actions/cache`, which has no such restriction.
+runner unpacks the action to `…/_actions/…`, a sibling of the workspace.
 
-- The cache path is the hardcoded `~/.npm` rather than `npm config get cache`,
-  so a workspace `.npmrc` cannot redirect which directory gets archived into a
-  cache other runs in the repo can read.
-- Added the `external-consumer` CI job, which invokes the action as
-  `owner/repo@sha` so it runs from `_actions/` like a real consumer. The
-  existing `uses: ./` canary structurally could not catch this.
+**npm caching has been removed entirely** rather than repaired. Measured, it
+saved ~0.3s: the 56 MB of packages move either way, just from Azure instead of
+npm's CDN, and unpacking 181 MB into `node_modules` dominates regardless. It
+was also the source of every bug this action has shipped.
+
+- Added two CI jobs that exercise the action from outside the workspace, which
+  the existing `uses: ./` canary structurally cannot do: `out-of-workspace`
+  (pre-merge, runs the entrypoint from `$RUNNER_TEMP`) and `external-consumer`
+  (post-merge, `uses: …@main` so the runner fetches into `_actions/`).
 - No input or output changes. Upgrading is a version bump only.
 
 ## v1.0.2

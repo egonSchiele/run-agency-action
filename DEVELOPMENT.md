@@ -10,15 +10,15 @@ action.yml                  # The composite action definition.
 scripts/run.sh              # Entrypoint: installs deps, runs `agency run`.
 bundled/
   package.json              # Pinned versions of agency-lang + @agency-lang/github.
-  package-lock.json         # Lockfile — npm cache key is a sha256 of this.
+  package-lock.json         # Lockfile — `npm ci` installs exactly this.
   .gitignore                # Ignores node_modules/.
 tests/
   canary.agency             # Smallest possible .agency file, used by CI.
 examples/
   review-agent/             # Reference agent: scheduled doc-review + PR.
 .github/workflows/
-  ci.yml                    # Canary (`uses: ./`) + external-consumer
-                            # (`uses: owner/repo@sha`) + missing-file.
+  ci.yml                    # canary, out-of-workspace, external-consumer,
+                            # missing-file.
   release.yml               # Fires on `v*` tag push: tarball + attestation + release.
 CHANGELOG.md                # One section per published version (## v1.0.0, …).
 ```
@@ -232,38 +232,42 @@ git push
 If CI passes, follow the [release process](#release-process) above to cut a
 new tag.
 
-The npm cache key in [action.yml](./action.yml) is a `sha256sum` of
-`bundled/package-lock.json`, so changing the lockfile automatically
-invalidates the cache for downstream consumers — no manual cache busting
-needed.
+### Why there is no npm cache
 
-That hash is computed in bash on purpose, and it is the single most important
-thing to know about this file:
+There is deliberately no npm caching in this action. It was measured and it is
+not worth it:
 
-> **Anything the action reads from its own directory is outside
-> `$GITHUB_WORKSPACE`.** Never route such a path through `hashFiles()` or an
-> action input that globs — they discard it silently.
+| | |
+|---|---|
+| npm cache payload for the bundle | 56 MB |
+| `npm ci` with a cold npm cache | 2.6s |
+| `npm ci` with a warm npm cache | 2.3s |
+| Savings | ~0.3s |
 
-Handing the lockfile to `actions/setup-node`'s `cache-dependency-path` (which
-we used to do) resolves through `@actions/glob`, which drops paths outside the
-workspace and then throws `Some specified paths were not resolved, unable to
-cache dependencies`. The runner unpacks the action to
-`…/_actions/<owner>/<repo>/<ref>/`, a *sibling* of the workspace — so the
-action failed for every consumer while CI stayed green, because `uses: ./`
-makes the action path and the workspace the same directory. The
-`external-consumer` job in [ci.yml](./.github/workflows/ci.yml) exists to
-catch that class of bug.
+Caching does not avoid moving those 56 MB — it moves them from Azure blob
+storage instead of npm's CDN, and adds compression plus a 56 MB upload on every
+miss. What costs real time is unpacking 181 MB into `node_modules`, which
+happens either way. So the optimization is roughly break-even at best.
 
-Two deliberate choices in the cache step:
+It was also the source of every bug this action has shipped: an
+out-of-workspace lockfile path that broke it for 100% of consumers, a
+consumer-controlled cache directory via `.npmrc`, and a `restore-keys` fallback
+that let a cache from a different lockfile satisfy this one.
 
-- **`path: ~/.npm` is hardcoded**, not read from `npm config get cache`. That
-  value is consumer-controlled through a workspace `.npmrc`, and it decides
-  which directory gets uploaded into a cache that other runs in the repo can
-  read. If a consumer does relocate npm's cache, they get a cache miss — not a
-  wrong directory archived.
-- **No `restore-keys`.** A cache built from a different lockfile is not a cache
-  for this one. `npm ci` would still verify integrity and re-fetch, so the
-  fallback bought staleness rather than speed.
+**If you ever add caching back, the rule that broke it the first time is:**
+
+> Anything the action reads from its own directory is outside
+> `$GITHUB_WORKSPACE`. Never route such a path through `hashFiles()` or an
+> action input that globs — they discard it silently, and `setup-node` then
+> throws `Some specified paths were not resolved, unable to cache
+> dependencies`.
+
+The runner unpacks the action to `…/_actions/<owner>/<repo>/<ref>/`, a
+*sibling* of the workspace. That bug survived because `uses: ./` in this repo's
+own CI makes the action path and the workspace the same directory, so CI stayed
+green while every real consumer failed. The `out-of-workspace` and
+`external-consumer` jobs in [ci.yml](./.github/workflows/ci.yml) exist to catch
+that class of bug.
 
 ### Updating the third-party actions (`actions/checkout`, `actions/setup-node`, etc.)
 
