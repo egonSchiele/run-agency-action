@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.0.3
 
 **Fixes a bug that made the action fail for every consumer.** Any workflow
 using `v1.0.0`–`v1.0.2` died after ~14 seconds, before running the `.agency`
