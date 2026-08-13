@@ -15,9 +15,11 @@ lockfile inside the action's own directory. That input resolves through
 `@actions/glob`, which discards anything outside `$GITHUB_WORKSPACE` — and the
 runner unpacks the action to `…/_actions/…`, a sibling of the workspace. The
 npm cache is now keyed on a `sha256` of the lockfile computed in bash and
-applied with `actions/cache`, which has no such restriction. Caching behavior
-is unchanged for users.
+applied with `actions/cache`, which has no such restriction.
 
+- The cache path is the hardcoded `~/.npm` rather than `npm config get cache`,
+  so a workspace `.npmrc` cannot redirect which directory gets archived into a
+  cache other runs in the repo can read.
 - Added the `external-consumer` CI job, which invokes the action as
   `owner/repo@sha` so it runs from `_actions/` like a real consumer. The
   existing `uses: ./` canary structurally could not catch this.
