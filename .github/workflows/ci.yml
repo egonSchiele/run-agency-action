@@ -24,16 +24,40 @@ jobs:
           bash scripts/run.sh 2>&1 | tee canary.log
           grep -q "canary: ok" canary.log
 
-  # Runs the action the way consumers do: `owner/repo@sha` puts it in
-  # `_actions/`, outside the workspace. The `canary` job above uses `./`, which
-  # puts it IN the workspace and so cannot catch out-of-workspace bugs.
-  # Skipped on fork PRs, whose head SHA does not exist in this repo.
-  external-consumer:
-    if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'push'
+  # `uses: ./` puts the action IN the workspace, so it cannot catch bugs that
+  # only appear when the action lives outside it — which is where the runner
+  # actually puts it for consumers. This runs the entrypoint from a copy under
+  # $RUNNER_TEMP, mirroring the real `_actions/` layout.
+  out-of-workspace:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
-      - uses: egonSchiele/run-agency-action@${{ github.sha }}
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
+        with:
+          node-version: '20'
+      - name: Run entrypoint from outside $GITHUB_WORKSPACE
+        run: |
+          set -o pipefail
+          ext="$RUNNER_TEMP/_actions/egonSchiele/run-agency-action/test"
+          mkdir -p "$ext"
+          cp -R action.yml scripts bundled "$ext"/
+          AGENCY_FILE=tests/canary.agency \
+          AGENCY_EXTRA_DEPS='' \
+          GITHUB_ACTION_PATH="$ext" \
+          bash "$ext/scripts/run.sh" 2>&1 | tee oow.log
+          grep -q "canary: ok" oow.log
+
+  # The full end-to-end consumer path: fetched into `_actions/` by the runner.
+  # `uses:` does not evaluate expressions, so this can only name a static ref —
+  # meaning it validates main, catching a regression one merge after it lands
+  # rather than one release later. The `out-of-workspace` job above is the
+  # pre-merge guard.
+  external-consumer:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - uses: egonSchiele/run-agency-action@main
         with:
           file: tests/canary.agency
 
