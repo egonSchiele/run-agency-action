@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.1.0
+
+Upgrades the bundled Agency runtime from `agency-lang` 0.1.1 to 0.16.0, so
+`.agency` files run against the current language rather than a version 15
+minors old.
+
+- `bundled/package.json` now depends on `agency-lang@^0.16.0` (lockfile pins
+  0.16.0). `@agency-lang/github` stays at 0.1.0.
+- The dependency tree shrank considerably in the process (~1650 fewer lockfile
+  lines).
+- No input or output changes to the action itself. Upgrading is a version bump
+  only, but the language your `.agency` files are evaluated against changes.
+
 ## v1.0.3
 
 **Fixes a bug that made the action fail for every consumer.** Any workflow
