@@ -1,5 +1,26 @@
 # Changelog
 
+## v1.2.0
+
+**Fixes a bug that made v1.1.0 fail for every consumer.** The action died
+during `npm ci`, before running the `.agency` file, with:
+
+```
+npm error ERESOLVE could not resolve
+npm error peer agency-lang@"0.1.1" from @agency-lang/github@0.1.0
+```
+
+`@agency-lang/github` 0.1.0 requires exactly `agency-lang` 0.1.1, and v1.1.0
+bundled `agency-lang` 0.16.0. Version 0.1.1 of `@agency-lang/github` accepts
+any `agency-lang` from 0.9.0 up.
+
+- `bundled/package.json` now depends on `@agency-lang/github@0.1.1` and
+  `agency-lang@^0.39.2` (the lockfile pins 0.39.2), so `.agency` files run
+  against the current language.
+- The `node-version` input now defaults to `22` instead of `20`. `agency-lang`
+  requires Node 22.13 or newer, and Node 20 is no longer supported.
+- The `out-of-workspace` CI job runs on Node 22 to match.
+
 ## v1.1.0
 
 Upgrades the bundled Agency runtime from `agency-lang` 0.1.1 to 0.16.0, so
