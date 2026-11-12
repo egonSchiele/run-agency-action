@@ -22,7 +22,7 @@ Or pin to an exact commit SHA (recommended for security):
 | Input          | Required | Default | Description                                                       |
 | -------------- | -------- | ------- | ----------------------------------------------------------------- |
 | `file`         | yes      | —       | Path to the `.agency` file to run.                                |
-| `node-version` | no       | `20`    | Node version passed to `actions/setup-node`.                      |
+| `node-version` | no       | `22`    | Node version passed to `actions/setup-node`.                      |
 | `extra-deps`   | no       | `''`    | Space-separated npm packages installed alongside the bundled stdlib. |
 
 ## Versioning

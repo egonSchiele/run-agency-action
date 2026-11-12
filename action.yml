@@ -7,7 +7,7 @@ inputs:
   node-version:
     description: Node version
     required: false
-    default: '20'
+    default: '22'
   extra-deps:
     description: Space-separated npm packages to install (added to bundled stdlib)
     required: false
